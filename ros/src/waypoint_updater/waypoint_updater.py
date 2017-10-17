@@ -6,6 +6,8 @@ from styx_msgs.msg import Lane, Waypoint
 
 import math
 
+from tf.transformations import euler_from_quaternion 
+
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
 
@@ -37,16 +39,137 @@ class WaypointUpdater(object):
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
-
+        self.base_waypoints = []
+        self.final_waypoints = []
+        self.moving = False
+        self.last_position = None
+        self.last_pub_time = None
+        self.last_nxt_wp   = None
         rospy.spin()
 
     def pose_cb(self, msg):
         # TODO: Implement
-        pass
+
+        dist_tol = 0.01
+        time_tol = 0.05
+        if self.last_pub_time is None:
+            time_since_last_pub = 100
+        else:
+            time_since_last_pub = msg.header.stamp.to_sec() - self.last_pub_time.to_sec()
+
+        #rospy.loginfo('time_since_last_pub: %s', time_since_last_pub)
+        
+        if self.last_position is None:
+            self.moving = True
+        elif self.dist(msg.pose.position, self.last_position) < dist_tol:
+            self.moving = False
+        else:
+            self.moving = True
+        #rospy.loginfo('self.moving: %s', self.moving)
+        if len(self.base_waypoints) < 1 or not self.moving or time_since_last_pub < time_tol :
+            ## only calc final_waypoints when certain conditions are met
+            pass
+        else:
+            ## get the next waypoint (index)
+            next_waypoint = self.get_next_waypoint(msg.pose)
+            #rospy.loginfo('next_waypoint: %s', next_waypoint)
+
+            ## update the final_waypoints
+            self.final_waypoints = self.get_final_waypoints(next_waypoint)
+            #rospy.loginfo('final_waypoints[1]: %s', self.final_waypoints[1])
+
+            self.last_nxt_wp    = next_waypoint
+            self.last_position  = msg.pose.position
+
+        if len(self.final_waypoints) > 1 and time_since_last_pub >= time_tol :
+            ## only publish the final_waypoints with header when /current_pose meassage received and certain time has passed
+            self.publish()
+
+
+    def publish(self):
+        
+        lane = Lane()
+        lane.header.frame_id = '/world'
+        lane.header.stamp = rospy.Time.now()
+        lane.waypoints    = self.final_waypoints
+
+        self.final_waypoints_pub.publish(lane)
+
+        self.last_pub_time = rospy.Time.now()
+
+    def get_next_waypoint(self,pose):
+
+        next_waypoint = self.get_nearest_waypoint(pose.position)
+        if next_waypoint < len(self.base_waypoints)-1:
+            orientation = self.base_waypoints[next_waypoint].pose.pose.orientation
+            quatn = [orientation.x,orientation.y,orientation.z,orientation.w]
+            (roll,pitch,yaw) = euler_from_quaternion(quatn)
+            #rospy.loginfo('next_waypoint yaw: %s', yaw)
+            wp_position = self.base_waypoints[next_waypoint].pose.pose.position
+            dx = wp_position.x - pose.position.x
+            dy = wp_position.y - pose.position.y 
+            angle_car_to_nxt_wp = math.atan2(dy,dx)
+
+            diff_angle = abs(angle_car_to_nxt_wp - yaw) # both angles are supposed to be within [0,pi] and [-pi,0]
+            diff_angle = min(diff_angle, 2*math.pi - diff_angle)
+
+            if diff_angle >= math.pi/2:
+                next_waypoint += 1
+
+        return next_waypoint 
+
+    def get_nearest_waypoint(self,position):
+
+        nearest = 1e6
+        nearest_waypoint = self.last_nxt_wp
+
+        ## loop through all base waypoints to compare may not be a good idea
+        if self.last_nxt_wp is None: 
+            range_lower = 0
+            range_upper = len(self.base_waypoints)
+        else:
+            distance = self.dist(self.base_waypoints[self.last_nxt_wp].pose.pose.position,
+                                                                                 position)
+            extend_wp = max(2 * int(distance) + 2, 50)
+            range_lower = max(0, (self.last_nxt_wp - extend_wp))
+            range_upper = min(len(self.base_waypoints), (self.last_nxt_wp + 2 * extend_wp))
+
+        for i in range(range_lower, range_upper):
+            distance = self.dist(self.base_waypoints[i].pose.pose.position, position)
+            if distance is not None and distance < nearest:
+                nearest = distance
+                nearest_waypoint  = i 
+
+        return nearest_waypoint 
+
+    def dist(self,pos1,pos2):
+        if pos1 is None or pos2 is None:
+            return None
+        else:
+            return math.sqrt((pos1.x-pos2.x)**2 + (pos1.y-pos2.y)**2 + (pos1.z-pos2.z)**2)
+
+    def get_final_waypoints(self, next_waypoint):
+
+        final_waypoints = []
+        for i in range(next_waypoint, min(next_waypoint+LOOKAHEAD_WPS,len(self.base_waypoints))):
+            p = Waypoint()
+            waypoint = self.base_waypoints[i]
+            p.pose.pose.position.x    = waypoint.pose.pose.position.x
+            p.pose.pose.position.y    = waypoint.pose.pose.position.y
+            p.pose.pose.position.z    = waypoint.pose.pose.position.z
+            p.pose.pose.orientation.x = waypoint.pose.pose.orientation.x
+            p.pose.pose.orientation.y = waypoint.pose.pose.orientation.y
+            p.pose.pose.orientation.z = waypoint.pose.pose.orientation.z
+            p.pose.pose.orientation.w = waypoint.pose.pose.orientation.w
+            p.twist.twist.linear.x    = waypoint.twist.twist.linear.x
+            
+            final_waypoints.append(p)
+
+        return final_waypoints
 
     def waypoints_cb(self, waypoints):
         # TODO: Implement
-        pass
+        self.base_waypoints = waypoints.waypoints
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement

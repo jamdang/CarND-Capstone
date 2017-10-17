@@ -54,11 +54,30 @@ class DBWNode(object):
                                          BrakeCmd, queue_size=1)
 
         # TODO: Create `TwistController` object
-        # self.controller = TwistController(<Arguments you wish to provide>)
+        self.controller = Controller(wheel_base, steer_ratio, 0, 
+                                     max_lat_accel, max_steer_angle)
 
         # TODO: Subscribe to all the topics you need to
+        rospy.Subscriber('/current_velocity', TwistStamped, self.velo_cb)
+        rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
+        rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_cb)
+
+        self.current_vel = 0
+        self.lin_tgt_vel = 0
+        self.ang_tgt_vel = 0
+        self.dbw_enabled = False
 
         self.loop()
+
+    def velo_cb(self, twist_stamped_msg):
+        self.current_vel = twist_stamped_msg.twist.linear.x
+
+    def twist_cb(self, twist_stamped_msg):
+        self.lin_tgt_vel = twist_stamped_msg.twist.linear.x
+        self.ang_tgt_vel = twist_stamped_msg.twist.angular.z
+
+    def dbw_cb(self, dbw_enabled):
+        self.dbw_enabled = dbw_enabled
 
     def loop(self):
         rate = rospy.Rate(50) # 50Hz
@@ -70,8 +89,13 @@ class DBWNode(object):
             #                                                     <current linear velocity>,
             #                                                     <dbw status>,
             #                                                     <any other argument you need>)
-            # if <dbw is enabled>:
-            #   self.publish(throttle, brake, steer)
+
+            throttle, brake, steer = self.controller.control(self.lin_tgt_vel, self.ang_tgt_vel, 
+                                                             self.current_vel,
+                                                             self.dbw_enabled 
+                                                             )
+            if self.dbw_enabled:
+                self.publish(throttle, brake, steer)
             rate.sleep()
 
     def publish(self, throttle, brake, steer):
