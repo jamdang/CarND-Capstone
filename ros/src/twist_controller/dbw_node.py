@@ -53,9 +53,19 @@ class DBWNode(object):
         self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
                                          BrakeCmd, queue_size=1)
 
+        kp = 0.1
+        ki = 0.5
+        kd = 0.01
+
+        pid_min = -1
+        pid_max = 1
+        max_brake_cmd = 5 
+
+
         # TODO: Create `TwistController` object
         self.controller = Controller(wheel_base, steer_ratio, 0, 
-                                     max_lat_accel, max_steer_angle)
+                                     max_lat_accel, max_steer_angle,
+                                     kp, ki, kd, pid_min, pid_max, max_brake_cmd )
 
         # TODO: Subscribe to all the topics you need to
         rospy.Subscriber('/current_velocity', TwistStamped, self.velo_cb)
@@ -63,6 +73,7 @@ class DBWNode(object):
         rospy.Subscriber('/vehicle/dbw_enabled', Bool, self.dbw_cb)
 
         self.current_vel = 0
+        self.current_vel_time = 0
         self.lin_tgt_vel = 0
         self.ang_tgt_vel = 0
         self.dbw_enabled = False
@@ -71,6 +82,7 @@ class DBWNode(object):
 
     def velo_cb(self, twist_stamped_msg):
         self.current_vel = twist_stamped_msg.twist.linear.x
+        self.current_vel_time = twist_stamped_msg.header.stamp.to_sec()
 
     def twist_cb(self, twist_stamped_msg):
         self.lin_tgt_vel = twist_stamped_msg.twist.linear.x
@@ -91,7 +103,7 @@ class DBWNode(object):
             #                                                     <any other argument you need>)
 
             throttle, brake, steer = self.controller.control(self.lin_tgt_vel, self.ang_tgt_vel, 
-                                                             self.current_vel,
+                                                             self.current_vel, self.current_vel_time, 
                                                              self.dbw_enabled 
                                                              )
             if self.dbw_enabled:

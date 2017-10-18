@@ -51,7 +51,7 @@ class WaypointUpdater(object):
         # TODO: Implement
 
         dist_tol = 0.01
-        time_tol = 0.05
+        time_tol = 0.1
         if self.last_pub_time is None:
             time_since_last_pub = 100
         else:
