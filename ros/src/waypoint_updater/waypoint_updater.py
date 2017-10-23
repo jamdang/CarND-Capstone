@@ -5,6 +5,7 @@ from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 
 import math
+from std_msgs.msg import Int32
 
 from tf.transformations import euler_from_quaternion 
 
@@ -24,7 +25,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-
+MAX_DECEL     = 0.4 
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -34,6 +35,7 @@ class WaypointUpdater(object):
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
@@ -41,6 +43,7 @@ class WaypointUpdater(object):
         # TODO: Add other member variables you need below
         self.base_waypoints = []
         self.final_waypoints = []
+        self.stop_wp = -1 
         self.moving = False
         self.last_position = None
         self.last_pub_time = None
@@ -51,7 +54,7 @@ class WaypointUpdater(object):
         # TODO: Implement
 
         dist_tol = 0.01
-        time_tol = 0.1
+        time_tol = 0.05 ##0.1
         if self.last_pub_time is None:
             time_since_last_pub = 100
         else:
@@ -66,7 +69,7 @@ class WaypointUpdater(object):
         else:
             self.moving = True
         #rospy.loginfo('self.moving: %s', self.moving)
-        if len(self.base_waypoints) < 1 or not self.moving or time_since_last_pub < time_tol :
+        if len(self.base_waypoints) < 1 or time_since_last_pub < time_tol :
             ## only calc final_waypoints when certain conditions are met
             pass
         else:
@@ -161,8 +164,23 @@ class WaypointUpdater(object):
             p.pose.pose.orientation.y = waypoint.pose.pose.orientation.y
             p.pose.pose.orientation.z = waypoint.pose.pose.orientation.z
             p.pose.pose.orientation.w = waypoint.pose.pose.orientation.w
-            p.twist.twist.linear.x    = waypoint.twist.twist.linear.x
-            
+            linear_vel                = waypoint.twist.twist.linear.x
+            ## modify linear velocity for this waypoint if there is an upcoming redlight 
+            if self.stop_wp > 0: # i.e., not -1
+                stop_margin = 2.5 ## meter 
+                if i >= self.stop_wp:
+                    vel = 0.
+                else:
+                    dist = self.distance(self.base_waypoints, i, self.stop_wp)
+                    if dist < stop_margin:
+                        vel =  0.
+                    else: 
+                        vel = math.sqrt(2 * MAX_DECEL * (dist - stop_margin ))
+                if vel < 1.:
+                    vel = 0.
+                linear_vel = min(vel, linear_vel)
+            p.twist.twist.linear.x    = linear_vel
+            ## put this way point in the list 
             final_waypoints.append(p)
 
         return final_waypoints
@@ -173,7 +191,8 @@ class WaypointUpdater(object):
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+        self.stop_wp = msg.data 
+        ##rospy.loginfo('stop waypoint: ', self.stop_wp)
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
@@ -199,3 +218,4 @@ if __name__ == '__main__':
         WaypointUpdater()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start waypoint updater node.')
+

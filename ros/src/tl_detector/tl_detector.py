@@ -11,7 +11,9 @@ import tf
 import cv2
 import yaml
 
-STATE_COUNT_THRESHOLD = 3
+import math
+
+STATE_COUNT_THRESHOLD = 5
 
 class TLDetector(object):
     def __init__(self):
@@ -101,7 +103,56 @@ class TLDetector(object):
 
         """
         #TODO implement
-        return 0
+        nearest = 1e6
+        nearest_waypoint  = 0
+
+        ## loop through all base waypoints to compare may not be a good idea
+        range_lower = 0
+        range_upper = len(self.waypoints.waypoints)
+
+        for i in range(range_lower, range_upper):
+            distance = self.dist(self.waypoints.waypoints[i].pose.pose.position, pose.position)
+            if distance is not None and distance < nearest:
+                nearest = distance
+                nearest_waypoint  = i 
+
+        return nearest_waypoint 
+
+    def dist(self,pos1,pos2):
+        if pos1 is None or pos2 is None:
+            return None
+        else:
+            return math.sqrt((pos1.x-pos2.x)**2 + (pos1.y-pos2.y)**2 + (pos1.z-pos2.z)**2)
+
+    def get_closest_vis_light(self, car_position, stop_line_positions):
+        ## car_position: nearest waypoint to the ego car
+
+        if car_position is None:
+            return None, -1 
+
+        nearest = 1e6
+        nearest_light_index = 0
+        visible_distance = 170
+
+        for i in range(len(stop_line_positions)):
+            car_x = self.waypoints.waypoints[car_position].pose.pose.position.x
+            car_y = self.waypoints.waypoints[car_position].pose.pose.position.y
+            distance = math.sqrt( (car_x-stop_line_positions[i][0])**2 + (car_y-stop_line_positions[i][1])**2 )
+            if distance is not None and distance < nearest:
+                nearest = distance
+                nearest_light_index  = i 
+
+        if nearest < visible_distance:
+            light = self.lights[nearest_light_index]
+            stop_line_pose = Pose()
+            stop_line_pose.position.x = stop_line_positions[nearest_light_index][0]
+            stop_line_pose.position.y = stop_line_positions[nearest_light_index][1]
+            stop_line_pose.position.z = 0
+            light_wp = self.get_closest_waypoint(stop_line_pose)
+            if car_position <= light_wp:
+                return light, light_wp
+        
+        return None, -1
 
     def get_light_state(self, light):
         """Determines the current color of the traffic light
@@ -119,6 +170,10 @@ class TLDetector(object):
 
         cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
 
+        ## temp code start ---
+        return light.state
+        ## temp code end ---
+
         #Get classification
         return self.light_classifier.get_classification(cv_image)
 
@@ -131,19 +186,26 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+        if self.waypoints is None:
+            return -1, TrafficLight.UNKNOWN
+
         light = None
 
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
+        car_position = None 
         if(self.pose):
             car_position = self.get_closest_waypoint(self.pose.pose)
 
         #TODO find the closest visible traffic light (if one exists)
 
+        light, light_wp = self.get_closest_vis_light(car_position,stop_line_positions)
+
         if light:
             state = self.get_light_state(light)
             return light_wp, state
-        self.waypoints = None
+        ##self.waypoints = None
+        ##rospy.loginfo("light:  %s", light)
         return -1, TrafficLight.UNKNOWN
 
 if __name__ == '__main__':
@@ -151,3 +213,4 @@ if __name__ == '__main__':
         TLDetector()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start traffic node.')
+

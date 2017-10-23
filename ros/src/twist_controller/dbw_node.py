@@ -53,13 +53,13 @@ class DBWNode(object):
         self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
                                          BrakeCmd, queue_size=1)
 
-        kp = 0.1
-        ki = 0.5
-        kd = 0.01
+        kp = 0.5
+        ki = 2.
+        kd = 0.02
 
         pid_min = -1
         pid_max = 1
-        max_brake_cmd = 5 
+        max_brake_cmd = min(-decel_limit, 1) * vehicle_mass * wheel_radius ## N.m 
 
 
         # TODO: Create `TwistController` object
@@ -131,3 +131,4 @@ class DBWNode(object):
 
 if __name__ == '__main__':
     DBWNode()
+
