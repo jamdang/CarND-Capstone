@@ -20,17 +20,21 @@ class PID(object):
     def step(self, error, sample_time):
         self.last_int_val = self.int_val
 
-        integral = self.int_val + error * sample_time;
-        derivative = (error - self.last_error) / sample_time;
+        integral = self.int_val + error * sample_time
+        derivative = (error - self.last_error) / sample_time
 
-        y = self.kp * error + self.ki * self.int_val + self.kd * derivative;
-        val = max(self.min, min(y, self.max))
+        y = self.kp * error + self.ki * self.int_val + self.kd * derivative
+        ##val = max(self.min, min(y, self.max)) 
 
-        if val > self.max:
-            val = self.max
-        elif val < self.min:
-            val = self.min
+        if y > self.max:
+            val = self.max 
+            ## self.int_val = (self.max - self.kp * error - self.kd * derivative) / self.ki #(wrong implementation)       
+        elif y < self.min:
+            val = self.min 
+            ## self.int_val = (self.min - self.kp * error - self.kd * derivative) / self.ki #(wrong implementation)          
         else:
+            val = y
+            ## only update the int_val when the total value is not saturated 
             self.int_val = integral
         self.last_error = error
 

@@ -14,7 +14,7 @@ class Controller(object):
                                             max_lat_accel, max_steer_angle )
 
         self.long_pid_controller = PID(kp, ki, kd, mn, mx)
-        tau = 9
+        tau = 40
         ts  = 1 
         self.low_pass_fltr = LowPassFilter(tau, ts)
         self.max_brake_cmd = max_brake_cmd
