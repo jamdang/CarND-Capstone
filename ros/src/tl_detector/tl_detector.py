@@ -13,7 +13,8 @@ import yaml
 
 import math
 
-STATE_COUNT_THRESHOLD = 5
+STATE_COUNT_THRESHOLD = 3
+temp = False 
 
 class TLDetector(object):
     def __init__(self):
@@ -41,6 +42,9 @@ class TLDetector(object):
         self.config = yaml.load(config_string)
 
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
+        if temp is True:
+            self.temp_pub = rospy.Publisher('/image_sample', Image, queue_size=1)
+            self.last_pub_time = None 
 
         self.bridge = CvBridge()
         self.light_classifier = TLClassifier()
@@ -70,9 +74,11 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
+        #rospy.loginfo('time now: %s', rospy.Time.now().to_sec())
+        
         self.has_image = True
         self.camera_image = msg
-        light_wp, state = self.process_traffic_lights()
+        light_wp, state = self.process_traffic_lights() # <---------------------- computationally slow (1)
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -80,6 +86,18 @@ class TLDetector(object):
         of times till we start using it. Otherwise the previous stable state is
         used.
         '''
+        #rospy.loginfo('time now: %s', rospy.Time.now().to_sec())
+        if temp is True:
+            if self.last_pub_time is None:
+                time_since_last_pub = 100
+            else:
+                time_since_last_pub = rospy.Time.now().to_sec() - self.last_pub_time.to_sec()
+            #rospy.loginfo('msg.header.stamp.to_sec(): %s', msg.header.stamp.to_sec())
+            #rospy.loginfo('time_since_last_pub: %s', time_since_last_pub)
+            if time_since_last_pub > 1.5:
+                self.temp_pub.publish(msg) 
+                self.last_pub_time = rospy.Time.now()
+
         if self.state != state:
             self.state_count = 0
             self.state = state
@@ -168,14 +186,17 @@ class TLDetector(object):
             self.prev_light_loc = None
             return False
 
-        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "bgr8")
+        cv_image = self.bridge.imgmsg_to_cv2(self.camera_image, "rgb8") #originally bgr8
 
-        ## temp code start ---
-        return light.state
-        ## temp code end ---
+        if temp is True:
+            ## temp code start ---
+            return light.state
+            ## temp code end ---
 
         #Get classification
-        return self.light_classifier.get_classification(cv_image)
+        light_state = self.light_classifier.get_classification(cv_image) # <---------------------- computationally slow (1.1.1)
+        rospy.loginfo('light_state: %s', light_state)
+        return light_state
 
     def process_traffic_lights(self):
         """Finds closest visible traffic light, if one exists, and determines its
@@ -202,7 +223,7 @@ class TLDetector(object):
         light, light_wp = self.get_closest_vis_light(car_position,stop_line_positions)
 
         if light:
-            state = self.get_light_state(light)
+            state = self.get_light_state(light) # <---------------------- computationally slow (1.1)
             return light_wp, state
         ##self.waypoints = None
         ##rospy.loginfo("light:  %s", light)
