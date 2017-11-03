@@ -21,6 +21,17 @@ def interpret_light(scores, classes):
     else:
         return TrafficLight.UNKNOWN
 
+def load_graph(graph_file):
+
+    with tf.Session(graph = tf.Graph()) as sess:
+      od_graph_def = tf.GraphDef()
+      with tf.gfile.GFile(graph_file, 'rb') as fid:
+        serialized_graph = fid.read()
+        od_graph_def.ParseFromString(serialized_graph)
+        tf.import_graph_def(od_graph_def, name='')
+        return sess, sess.graph
+
+
 class TLClassifier(object):
     def __init__(self):
         #TODO load classifier
@@ -32,27 +43,7 @@ class TLClassifier(object):
         ##NUM_CLASSES = 3
 
         ## Load a (frozen) Tensorflow model into memory
-        self.detection_graph = tf.Graph()
-        with self.detection_graph.as_default():
-          od_graph_def = tf.GraphDef()
-          with tf.gfile.GFile(PATH_TO_CKPT, 'rb') as fid:
-            serialized_graph = fid.read()
-            od_graph_def.ParseFromString(serialized_graph)
-            tf.import_graph_def(od_graph_def, name='')
-
-        with self.detection_graph.as_default():
-          with tf.Session(graph=self.detection_graph) as sess:
-            
-            # Definite input and output Tensors for detection_graph
-            self.image_tensor = self.detection_graph.get_tensor_by_name('image_tensor:0')
-            # Each box represents a part of the image where a particular object was detected.
-            ## detection_boxes = self.detection_graph.get_tensor_by_name('detection_boxes:0')
-            # Each score represent how level of confidence for each of the objects.
-            self.detection_scores = self.detection_graph.get_tensor_by_name('detection_scores:0')
-            self.detection_classes = self.detection_graph.get_tensor_by_name('detection_classes:0')
-            ## num_detections = self.detection_graph.get_tensor_by_name('num_detections:0')
-
-
+        self.sess, self.detection_graph = load_graph(PATH_TO_CKPT)
 
     def get_classification(self, image):
         """Determines the color of the traffic light in the image
@@ -66,27 +57,24 @@ class TLClassifier(object):
         """
         light_state = TrafficLight.UNKNOWN
 
-        with self.detection_graph.as_default():
-          with tf.Session(graph=self.detection_graph) as sess:
-            
-            # Definite input and output Tensors for detection_graph
-            ##image_tensor = self.detection_graph.get_tensor_by_name('image_tensor:0')
-            # Each box represents a part of the image where a particular object was detected.
-            ##detection_boxes = self.detection_graph.get_tensor_by_name('detection_boxes:0')
-            # Each score represent how level of confidence for each of the objects.
-            ##detection_scores = self.detection_graph.get_tensor_by_name('detection_scores:0')
-            ##detection_classes = self.detection_graph.get_tensor_by_name('detection_classes:0')
-            ##num_detections = self.detection_graph.get_tensor_by_name('num_detections:0')
-            
-            image_np = image #load_image_into_numpy_array(image)
-            # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
-            image_np_expanded = np.expand_dims(image_np, axis=0)
-            # Actual detection.
-            (scores, classes) = sess.run(
-                [self.detection_scores, self.detection_classes],
-                feed_dict={self.image_tensor: image_np_expanded})
+        # Definite input and output Tensors for detection_graph
+        image_tensor = self.detection_graph.get_tensor_by_name('image_tensor:0')
+        # Each box represents a part of the image where a particular object was detected.
+        ##detection_boxes = self.detection_graph.get_tensor_by_name('detection_boxes:0')
+        # Each score represent how level of confidence for each of the objects.
+        detection_scores = self.detection_graph.get_tensor_by_name('detection_scores:0')
+        detection_classes = self.detection_graph.get_tensor_by_name('detection_classes:0')
+        ##num_detections = self.detection_graph.get_tensor_by_name('num_detections:0')
 
-            light_state = interpret_light(scores, classes)
-        
+        image_np = image #load_image_into_numpy_array(image)
+        # Expand dimensions since the model expects images to have shape: [1, None, None, 3]
+        image_np_expanded = np.expand_dims(image_np, axis=0)
+        # Actual detection.
+        (scores, classes) = self.sess.run(
+            [detection_scores, detection_classes],
+            feed_dict={image_tensor: image_np_expanded})
+
+        light_state = interpret_light(scores, classes)
+
         #TODO implement light color prediction
         return light_state
