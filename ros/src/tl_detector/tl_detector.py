@@ -14,7 +14,7 @@ import yaml
 import math
 
 STATE_COUNT_THRESHOLD = 3
-temp = False 
+temp = False
 
 class TLDetector(object):
     def __init__(self):
@@ -44,7 +44,7 @@ class TLDetector(object):
         self.upcoming_red_light_pub = rospy.Publisher('/traffic_waypoint', Int32, queue_size=1)
         if temp is True:
             self.temp_pub = rospy.Publisher('/image_sample', Image, queue_size=1)
-            self.last_pub_time = None 
+            self.last_pub_time = None
 
         self.bridge = CvBridge()
         self.light_classifier = TLClassifier()
@@ -54,7 +54,7 @@ class TLDetector(object):
         self.last_state = TrafficLight.UNKNOWN
         self.last_wp = -1
         self.state_count = 0
-
+        self.site_instead_of_sim = rospy.get_param('~site_instead_of_sim', False)
         rospy.spin()
 
     def pose_cb(self, msg):
@@ -75,7 +75,7 @@ class TLDetector(object):
 
         """
         #rospy.loginfo('time now: %s', rospy.Time.now().to_sec())
-        
+
         self.has_image = True
         self.camera_image = msg
         light_wp, state = self.process_traffic_lights() # <---------------------- computationally slow (1)
@@ -95,7 +95,7 @@ class TLDetector(object):
             #rospy.loginfo('msg.header.stamp.to_sec(): %s', msg.header.stamp.to_sec())
             #rospy.loginfo('time_since_last_pub: %s', time_since_last_pub)
             if time_since_last_pub > 1.5:
-                self.temp_pub.publish(msg) 
+                self.temp_pub.publish(msg)
                 self.last_pub_time = rospy.Time.now()
 
         if self.state != state:
@@ -132,9 +132,9 @@ class TLDetector(object):
             distance = self.dist(self.waypoints.waypoints[i].pose.pose.position, pose.position)
             if distance is not None and distance < nearest:
                 nearest = distance
-                nearest_waypoint  = i 
+                nearest_waypoint  = i
 
-        return nearest_waypoint 
+        return nearest_waypoint
 
     def dist(self,pos1,pos2):
         if pos1 is None or pos2 is None:
@@ -146,7 +146,7 @@ class TLDetector(object):
         ## car_position: nearest waypoint to the ego car
 
         if car_position is None:
-            return None, -1 
+            return None, -1
 
         nearest = 1e6
         nearest_light_index = 0
@@ -158,7 +158,8 @@ class TLDetector(object):
             distance = math.sqrt( (car_x-stop_line_positions[i][0])**2 + (car_y-stop_line_positions[i][1])**2 )
             if distance is not None and distance < nearest:
                 nearest = distance
-                nearest_light_index  = i 
+                nearest_light_index  = i
+        ##rospy.loginfo('nearest stopline: %s', nearest)
 
         if nearest < visible_distance:
             light = self.lights[nearest_light_index]
@@ -167,9 +168,9 @@ class TLDetector(object):
             stop_line_pose.position.y = stop_line_positions[nearest_light_index][1]
             stop_line_pose.position.z = 0
             light_wp = self.get_closest_waypoint(stop_line_pose)
-            if car_position <= light_wp:
+            if car_position <= light_wp or self.site_instead_of_sim: # if it's actual test trac (site), then condition "car_position <= light_wp" doesn't apply
                 return light, light_wp
-        
+
         return None, -1
 
     def get_light_state(self, light):
@@ -214,19 +215,19 @@ class TLDetector(object):
 
         # List of positions that correspond to the line to stop in front of for a given intersection
         stop_line_positions = self.config['stop_line_positions']
-        car_position = None 
+        car_position = None
         if(self.pose):
             car_position = self.get_closest_waypoint(self.pose.pose)
 
         #TODO find the closest visible traffic light (if one exists)
 
         light, light_wp = self.get_closest_vis_light(car_position,stop_line_positions)
-
+        ##rospy.loginfo("light:  %s", light)
         if light:
             state = self.get_light_state(light) # <---------------------- computationally slow (1.1)
             return light_wp, state
         ##self.waypoints = None
-        ##rospy.loginfo("light:  %s", light)
+
         return -1, TrafficLight.UNKNOWN
 
 if __name__ == '__main__':
@@ -234,4 +235,3 @@ if __name__ == '__main__':
         TLDetector()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start traffic node.')
-
