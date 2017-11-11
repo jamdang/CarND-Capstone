@@ -16,7 +16,7 @@ def translate_class(light_class):
     return TrafficLight.UNKNOWN
 
 def interpret_light(scores, classes):
-    if scores[0][0] > 0.6:
+    if scores[0][0] > 0.5:
        return translate_class(classes[0][0])
     else:
         return TrafficLight.UNKNOWN

@@ -7,7 +7,7 @@ from styx_msgs.msg import Lane, Waypoint
 import math
 from std_msgs.msg import Int32
 
-from tf.transformations import euler_from_quaternion 
+from tf.transformations import euler_from_quaternion
 
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
@@ -25,7 +25,7 @@ TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
 LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-MAX_DECEL     = 0.5 
+MAX_DECEL     = 0.5
 
 class WaypointUpdater(object):
     def __init__(self):
@@ -43,7 +43,7 @@ class WaypointUpdater(object):
         # TODO: Add other member variables you need below
         self.base_waypoints = []
         self.final_waypoints = []
-        self.stop_wp = -1 
+        self.stop_wp = -1
         self.moving = False
         self.last_position = None
         self.last_pub_time = None
@@ -61,7 +61,7 @@ class WaypointUpdater(object):
             time_since_last_pub = msg.header.stamp.to_sec() - self.last_pub_time.to_sec()
 
         #rospy.loginfo('time_since_last_pub: %s', time_since_last_pub)
-        
+
         if self.last_position is None:
             self.moving = True
         elif self.dist(msg.pose.position, self.last_position) < dist_tol:
@@ -90,7 +90,7 @@ class WaypointUpdater(object):
 
 
     def publish(self):
-        
+
         lane = Lane()
         lane.header.frame_id = '/world'
         lane.header.stamp = rospy.Time.now()
@@ -110,7 +110,7 @@ class WaypointUpdater(object):
             #rospy.loginfo('next_waypoint yaw: %s', yaw)
             wp_position = self.base_waypoints[next_waypoint].pose.pose.position
             dx = wp_position.x - pose.position.x
-            dy = wp_position.y - pose.position.y 
+            dy = wp_position.y - pose.position.y
             angle_car_to_nxt_wp = math.atan2(dy,dx)
 
             diff_angle = abs(angle_car_to_nxt_wp - yaw) # both angles are supposed to be within [0,pi] and [-pi,0]
@@ -119,7 +119,7 @@ class WaypointUpdater(object):
             if diff_angle >= math.pi/2:
                 next_waypoint += 1
 
-        return next_waypoint 
+        return next_waypoint
 
     def get_nearest_waypoint(self,position):
 
@@ -127,7 +127,7 @@ class WaypointUpdater(object):
         nearest_waypoint = self.last_nxt_wp
 
         ## loop through all base waypoints to compare may not be a good idea
-        if self.last_nxt_wp is None: 
+        if self.last_nxt_wp is None:
             range_lower = 0
             range_upper = len(self.base_waypoints)
         else:
@@ -141,9 +141,9 @@ class WaypointUpdater(object):
             distance = self.dist(self.base_waypoints[i].pose.pose.position, position)
             if distance is not None and distance < nearest:
                 nearest = distance
-                nearest_waypoint  = i 
+                nearest_waypoint  = i
 
-        return nearest_waypoint 
+        return nearest_waypoint
 
     def dist(self,pos1,pos2):
         if pos1 is None or pos2 is None:
@@ -164,23 +164,23 @@ class WaypointUpdater(object):
             p.pose.pose.orientation.y = waypoint.pose.pose.orientation.y
             p.pose.pose.orientation.z = waypoint.pose.pose.orientation.z
             p.pose.pose.orientation.w = waypoint.pose.pose.orientation.w
-            linear_vel                = waypoint.twist.twist.linear.x
-            ## modify linear velocity for this waypoint if there is an upcoming redlight 
+            linear_vel                = waypoint.twist.twist.linear.x * 0.9
+            ## modify linear velocity for this waypoint if there is an upcoming redlight
             if self.stop_wp > 0: # i.e., not -1
-                stop_margin = 2.5 ## meter 
+                stop_margin = 2.5 ## meter
                 if i >= self.stop_wp:
                     vel = 0.
                 else:
                     dist = self.distance(self.base_waypoints, i, self.stop_wp)
                     if dist < stop_margin:
                         vel =  0.
-                    else: 
+                    else:
                         vel = math.sqrt(2 * MAX_DECEL * (dist - stop_margin ))
                 if vel < 1.:
                     vel = 0.
                 linear_vel = min(vel, linear_vel)
             p.twist.twist.linear.x    = linear_vel
-            ## put this way point in the list 
+            ## put this way point in the list
             final_waypoints.append(p)
 
         return final_waypoints
@@ -191,7 +191,7 @@ class WaypointUpdater(object):
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
-        self.stop_wp = msg.data 
+        self.stop_wp = msg.data
         ##rospy.loginfo('stop waypoint: ', self.stop_wp)
 
     def obstacle_cb(self, msg):
@@ -218,4 +218,3 @@ if __name__ == '__main__':
         WaypointUpdater()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start waypoint updater node.')
-

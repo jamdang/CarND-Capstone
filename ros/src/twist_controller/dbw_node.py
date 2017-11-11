@@ -53,17 +53,17 @@ class DBWNode(object):
         self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
                                          BrakeCmd, queue_size=1)
 
-        kp = 1.
-        ki = 5.
-        kd = 0.02
+        kp = rospy.get_param('~k_p', 0.05)  # 1.
+        ki = rospy.get_param('~k_i', 0.25)  # 5.
+        kd = rospy.get_param('~k_d', 0.00075) # 0.02
 
         pid_min = -1
         pid_max = 1
-        max_brake_cmd = min(-decel_limit, 2.) * vehicle_mass * wheel_radius ## N.m 
+        max_brake_cmd = min(-decel_limit, 2.) * vehicle_mass * wheel_radius ## N.m
 
 
         # TODO: Create `TwistController` object
-        self.controller = Controller(wheel_base, steer_ratio, 0, 
+        self.controller = Controller(wheel_base, steer_ratio, 0,
                                      max_lat_accel, max_steer_angle,
                                      kp, ki, kd, pid_min, pid_max, max_brake_cmd )
 
@@ -102,9 +102,9 @@ class DBWNode(object):
             #                                                     <dbw status>,
             #                                                     <any other argument you need>)
 
-            throttle, brake, steer = self.controller.control(self.lin_tgt_vel, self.ang_tgt_vel, 
-                                                             self.current_vel, self.current_vel_time, 
-                                                             self.dbw_enabled 
+            throttle, brake, steer = self.controller.control(self.lin_tgt_vel, self.ang_tgt_vel,
+                                                             self.current_vel, self.current_vel_time,
+                                                             self.dbw_enabled
                                                              )
             if self.dbw_enabled:
                 self.publish(throttle, brake, steer)
@@ -131,4 +131,3 @@ class DBWNode(object):
 
 if __name__ == '__main__':
     DBWNode()
-
